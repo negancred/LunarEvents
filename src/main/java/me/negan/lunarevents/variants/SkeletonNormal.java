@@ -1,6 +1,7 @@
 package me.negan.lunarevents.variants;
 
 import me.negan.lunarevents.utils.Initialize;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.mob.SkeletonEntity;
 import net.minecraft.item.ItemStack;
@@ -10,7 +11,7 @@ import net.minecraft.util.math.BlockPos;
 
 public class SkeletonNormal {
 
-    private static final float SPAWN_CHANCE = 0.3f;
+    private static final float SPAWN_CHANCE = 0.32f;
     private static final double HEALTH = 40.0;
     private static final double DAMAGE = 6.0;
     private static final double SPEED = 0.25;
@@ -21,11 +22,17 @@ public class SkeletonNormal {
         Variants.registerVariant("Skeleton Normal", SPAWN_CHANCE, SkeletonNormal::spawn);
     }
 
-    public static boolean spawn(ServerWorld world, BlockPos pos) {
-        SkeletonEntity skeleton = Initialize.spawnEntity(world, pos, net.minecraft.entity.EntityType.SKELETON);
+    public static Entity spawn(ServerWorld world, BlockPos pos) {
+
+        SkeletonEntity skeleton = Initialize.spawnEntity(
+                world,
+                pos,
+                net.minecraft.entity.EntityType.SKELETON
+        );
+
         if (skeleton == null) {
-            System.out.println("[BloodMoon] ❌ Failed to create Skeleton instance at " + pos);
-            return false;
+            System.out.println("[BloodMoon] Failed to create Skeleton instance at " + pos);
+            return null;
         }
 
         Initialize.equip(skeleton, EquipmentSlot.MAINHAND, new ItemStack(Items.BOW));
@@ -37,9 +44,8 @@ public class SkeletonNormal {
         world.getServer().execute(() -> {
             Initialize.applyCoreAttributes(skeleton, HEALTH, DAMAGE, SPEED, SCALE);
             Initialize.targetNearestPlayer(world, skeleton, 100.0);
-            System.out.println("[BloodMoon] Spawned Skeleton Normal successfully at " + pos);
         });
 
-        return true;
+        return skeleton;
     }
 }

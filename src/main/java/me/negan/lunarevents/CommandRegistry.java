@@ -1,18 +1,20 @@
 package me.negan.lunarevents;
 
 import com.mojang.brigadier.Command;
-import me.negan.lunarevents.events.BloodMoon;
 import com.mojang.brigadier.context.CommandContext;
+import me.negan.lunarevents.events.BloodMoon;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 
 public class CommandRegistry {
+
     public static void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+
             dispatcher.register(
                     CommandManager.literal("forcebloodmoon")
                             .requires(source -> source.hasPermissionLevel(2))
@@ -28,55 +30,107 @@ public class CommandRegistry {
                     CommandManager.literal("bloodmoonscore")
                             .executes(CommandRegistry::checkBloodMoonScore)
             );
+
+            dispatcher.register(
+                    CommandManager.literal("mooncount")
+                            .requires(source -> source.hasPermissionLevel(2))
+                            .executes(CommandRegistry::checkMoonCount)
+            );
+            dispatcher.register(
+                    CommandManager.literal("forcecrimsonmoon")
+                            .requires(source -> source.hasPermissionLevel(2))
+                            .executes(CommandRegistry::forceCrimsonMoon)
+            );
+
         });
     }
 
+
     private static int forceBloodMoon(CommandContext<ServerCommandSource> context) {
-        ServerCommandSource source = context.getSource();
-        ServerWorld world = source.getServer().getOverworld();
-        long timeOfDay = world.getTimeOfDay() % 24000L;
-
-        if (timeOfDay >= 13000L && timeOfDay < 23000L) {
-            source.sendError(Text.literal("Cannot set Blood Moon at night! Wait until daytime."));
-            return Command.SINGLE_SUCCESS;
-        }
-
         NightEventManager.forceNextBloodMoon();
-
-        source.sendFeedback(() -> Text.literal("Tonight will be a Blood Moon!"), true);
+        context.getSource().sendFeedback(
+                () -> Text.literal("The next night will trigger a Moon event."),
+                true
+        );
         return Command.SINGLE_SUCCESS;
     }
 
     private static int checkBloodMoonChance(CommandContext<ServerCommandSource> context) {
-        ServerCommandSource source = context.getSource();
-
-        int pity = NightEventManager.getNightsSinceLastBloodMoon() + 1;
+        int pity = me.negan.lunarevents.config.LunarEventsM.get().getPity() + 1;
         double chance = NightEventManager.computeBloodMoonChance(pity);
 
-        if (NightEventManager.isBloodMoonForced()) {
-            source.sendFeedback(() -> Text.literal("Chance of Blood Moon: 100% (Forced)"), false);
-            return Command.SINGLE_SUCCESS;
-        }
-
-        int percent = (int) Math.round(chance * 100);
-        source.sendFeedback(() -> Text.literal("Chance of Blood Moon: " + percent + "%"), false);
+        context.getSource().sendFeedback(
+                () -> Text.literal("Chance of Moon event tonight: " + Math.round(chance * 100) + "%"),
+                false
+        );
         return Command.SINGLE_SUCCESS;
     }
 
+    private static int forceCrimsonMoon(CommandContext<ServerCommandSource> context) {
+
+        NightEventManager.forceNextCrimsonMoon();
+
+        context.getSource().sendFeedback(
+                () -> Text.literal("The next night will be a CRIMSON MOON.")
+                        .formatted(net.minecraft.util.Formatting.DARK_RED),
+                true
+        );
+
+        return Command.SINGLE_SUCCESS;
+    }
+
+
     private static int checkBloodMoonScore(CommandContext<ServerCommandSource> context) {
-        ServerCommandSource source = context.getSource();
         try {
-            ServerPlayerEntity player = source.getPlayer();
-            assert player != null;
+            ServerPlayerEntity player = context.getSource().getPlayer();
             int score = BloodMoon.getLunarScore(player);
 
-            source.sendFeedback(
-                    () -> Text.literal("Your Blood Moon score: " + score),
+            context.getSource().sendFeedback(
+                    () -> Text.literal("Your current Moon score: " + score),
                     false
             );
         } catch (Exception e) {
-            source.sendError(Text.literal("This command can only be used by a player."));
+            context.getSource().sendError(
+                    Text.literal("This command can only be used by a player.")
+            );
         }
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int checkMoonCount(CommandContext<ServerCommandSource> context) {
+
+        int event = Lunarevents.getNightEvent();
+
+        if (event == Lunarevents.CRIMSON_MOON) {
+            context.getSource().sendFeedback(
+                    () -> Text.literal("⚠ The Crimson Moon is happening RIGHT NOW.")
+                            .formatted(Formatting.DARK_RED, Formatting.BOLD),
+                    false
+            );
+            return Command.SINGLE_SUCCESS;
+        }
+
+        int count = NightEventManager.getBloodMoonCount();
+        int mod = count % 6;
+        int remaining = 5 - mod;
+
+        if (remaining == 0) {
+            context.getSource().sendFeedback(
+                    () -> Text.literal(
+                            "⚠ The next Blood Moon will be a Crimson Moon!"
+                    ).formatted(Formatting.DARK_RED),
+                    false
+            );
+        } else {
+            context.getSource().sendFeedback(
+                    () -> Text.literal(
+                            "Crimson Moon will occur in " + remaining + " Blood Moon"
+                                    + (remaining == 1 ? "" : "s") + "."
+                    ).formatted(Formatting.RED),
+                    false
+            );
+        }
+
         return Command.SINGLE_SUCCESS;
     }
 }

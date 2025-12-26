@@ -101,4 +101,51 @@ public class Initialize {
             applyAttributeModifier(scl, entity.getType().toString() + "_scale", delta, EntityAttributeModifier.Operation.ADD_VALUE);
         }
     }
+
+    public static void applyMultipliers(
+            MobEntity entity,
+            double damageMultiplier,
+            double speedMultiplier,
+            double scaleMultiplier
+    ) {
+        // DAMAGE
+        var dmg = entity.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE);
+        if (dmg != null) {
+            double base = dmg.getBaseValue();
+            double target = base * damageMultiplier;
+            applyAttributeModifier(
+                    dmg,
+                    entity.getType().toString() + "_crimson_damage",
+                    target - base,
+                    EntityAttributeModifier.Operation.ADD_VALUE
+            );
+        }
+
+        // SPEED
+        var spd = entity.getAttributeInstance(EntityAttributes.MOVEMENT_SPEED);
+        if (spd != null) {
+            double base = spd.getBaseValue();
+            double target = base * speedMultiplier;
+            applyAttributeModifier(
+                    spd,
+                    entity.getType().toString() + "_crimson_speed",
+                    target - base,
+                    EntityAttributeModifier.Operation.ADD_VALUE
+            );
+        }
+
+        // SCALE
+        var scl = entity.getAttributeInstance(EntityAttributes.SCALE);
+        if (scl != null) {
+            double base = scl.getBaseValue();
+            double target = base * scaleMultiplier;
+            applyAttributeModifier(
+                    scl,
+                    entity.getType().toString() + "_crimson_scale",
+                    target - base,
+                    EntityAttributeModifier.Operation.ADD_VALUE
+            );
+        }
+    }
+
 }

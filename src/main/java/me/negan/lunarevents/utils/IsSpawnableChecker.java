@@ -53,7 +53,7 @@ public class IsSpawnableChecker {
         }
 
         int lightLevel = world.getLightLevel(spawnPos);
-        if (lightLevel > 10) {
+        if (lightLevel > 4) {
             System.out.println("Attempt " + attempts + ": light level too high (" + lightLevel + ") at " + spawnPos);
             return null;
         }

@@ -1,218 +1,197 @@
 package me.negan.lunarevents.events;
 
 import me.negan.lunarevents.Lunarevents;
+import me.negan.lunarevents.NightEventManager;
 import me.negan.lunarevents.ui.BloodMoonBossBar;
+import me.negan.lunarevents.utils.Initialize;
 import me.negan.lunarevents.utils.IsSpawnableChecker;
-import net.minecraft.entity.*;
 import me.negan.lunarevents.variants.Variants;
+import net.minecraft.entity.*;
 import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.entity.mob.HostileEntity;
-import net.minecraft.entity.mob.ZombieEntity;
+import net.minecraft.entity.mob.*;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.HoverEvent;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.world.World;
 
-
 import java.util.*;
 
 public class BloodMoon extends NightEvent {
 
-    private static final int TICK_INTERVAL = 100;
-    private static final int MAX_HOSTILES = 90;
+    private static final int TICK_INTERVAL = 120;
     private static final int PLAYER_MAX_HOSTILES = 90;
 
     private static final int SCORE_PER_KILL = 8;
     private static final int SCORE_PER_DEATH = 30;
-    private static final int SCORE_MIN = 0;
-    private static final int SCORE_MAX = 250;
+    private static final int SCORE_MAX = 500;
 
-
-    private int tickCounter = 0;
+    private static final double CRIMSON_DAMAGE = 1.3;
+    private static final double CRIMSON_SPEED  = 1.2;
+    private static final double CRIMSON_SCALE  = 1.1;
+    private static final double CRIMSON_XP     = 1.75;
 
     private final Random random = new Random();
+    private int tickCounter = 0;
+
     private static final Map<UUID, Integer> lunarScores = new HashMap<>();
 
-
-    public BloodMoon() {
-        super();
-    }
 
     @Override
     protected void onNightStart(ServerWorld world) {
         if (!world.getRegistryKey().equals(World.OVERWORLD)) return;
 
-        if (Lunarevents.getNightEvent() == 1) {
-            System.out.println("Blood Moon Started");
+        int event = Lunarevents.getNightEvent();
+        if (event != Lunarevents.BLOOD_MOON && event != Lunarevents.CRIMSON_MOON) return;
 
-            String[] intros = {
-                    "Blood Moon is rising...",
-                    "The night glows crimson under the blood moon...",
-                    "You feel a chill... something dark awakens.",
-                    "The blood moon thirsts tonight..."
-            };
+        boolean crimson = event == Lunarevents.CRIMSON_MOON;
 
-            String chosenIntro = intros[world.getRandom().nextInt(intros.length)];
+        Text msg = Text.literal(
+                crimson ? "The Crimson Moon awakens..." : "Blood Moon is rising..."
+        ).formatted(
+                crimson ? Formatting.DARK_RED : Formatting.RED,
+                Formatting.ITALIC
+        );
 
-            Text message = Text.literal(chosenIntro)
-                    .formatted(Formatting.RED, Formatting.ITALIC)
-                    .styled(style -> style.withHoverEvent(
-                            new HoverEvent.ShowText(
-                                    Text.literal("You cannot sleep during this period!\n").formatted(Formatting.DARK_RED)
-                                            .append(Text.literal("Mobs are much stronger and will spawn in\n").formatted(Formatting.DARK_RED))
-                                            .append(Text.literal("large amounts.\n").formatted(Formatting.DARK_RED))
-                            )
-                    ));
-
-            world.getServer().getPlayerManager().broadcast(message, false);
-
-            for (ServerPlayerEntity player : world.getPlayers()) {
-                float pitch = 0.9f + world.getRandom().nextFloat() * 0.2f;
-
-
-                world.getServer().execute(() -> {
-                    world.playSound(
-                            null,
-                            player.getX(),
-                            player.getY(),
-                            player.getZ(),
-                            SoundEvents.AMBIENT_CAVE.value(),
-                            SoundCategory.AMBIENT,
-                            0.8f,
-                            1.0f
-                    );
-                });
-            }
-        }
-    }
-
-
-    @Override
-    protected void onNightEnd(ServerWorld world) {
-        if (Lunarevents.getNightEvent() != 1) return;
+        world.getServer().getPlayerManager().broadcast(msg, false);
 
         for (ServerPlayerEntity player : world.getPlayers()) {
-            int score = getLunarScore(player);
-            int xpReward;
-
-            if (score <= 0) {
-                xpReward = 50;
-            } else if (score >= SCORE_MAX) {
-                xpReward = 1000;
-            } else {
-                xpReward = (int) (100 + (score / (double) SCORE_MAX) * 900);
-            }
-
-            player.addExperience(xpReward);
-            lunarScores.put(player.getUuid(), 0);
-
-            player.sendMessage(
-                    Text.literal("You earned " + xpReward + " XP during the Blood Moon!")
-                            .formatted(Formatting.GREEN),
-                    true
+            world.playSound(
+                    null,
+                    player.getX(),
+                    player.getY(),
+                    player.getZ(),
+                    SoundEvents.AMBIENT_CAVE.value(),
+                    SoundCategory.AMBIENT,
+                    0.8f,
+                    crimson ? 0.6f : 1.0f
             );
         }
-
-        Lunarevents.setNightEvent(0);
-        BloodMoonBossBar.clearAllBars();
     }
-
 
     @Override
     protected void onNightTick(ServerWorld world, long timeOfDay) {
         if (!world.getRegistryKey().equals(World.OVERWORLD)) return;
-        if (Lunarevents.getNightEvent() != 1) return;
+
+        int event = Lunarevents.getNightEvent();
+        if (event != Lunarevents.BLOOD_MOON && event != Lunarevents.CRIMSON_MOON) return;
 
         tickCounter++;
         if (tickCounter < TICK_INTERVAL) return;
         tickCounter = 0;
 
         for (ServerPlayerEntity player : world.getPlayers()) {
-            if (player.isSpectator() || !world.isChunkLoaded(player.getBlockPos())) continue;
+            if (player.isSpectator()) continue;
 
-            int lunarScore = getLunarScore(player);
-            BloodMoonBossBar.updatePlayerBar(player, lunarScore);
+            int score = lunarScores.getOrDefault(player.getUuid(), 0);
+            BloodMoonBossBar.updatePlayerBar(player, score);
 
-            Box checkArea = new Box(
+            Box area = new Box(
                     player.getX() - 64, player.getY() - 32, player.getZ() - 64,
                     player.getX() + 64, player.getY() + 32, player.getZ() + 64
             );
 
-            int nearbyHostiles = world.getEntitiesByClass(HostileEntity.class, checkArea, e -> true).size();
-            if (nearbyHostiles < PLAYER_MAX_HOSTILES) {
+            int hostiles = world.getEntitiesByClass(HostileEntity.class, area, e -> true).size();
+            if (hostiles < PLAYER_MAX_HOSTILES) {
                 spawnHostileNearPlayer(world, player);
             }
         }
-
-        if (timeOfDay % 40 == 0) {
-            for (HostileEntity hostile : world.getEntitiesByClass(
-                    HostileEntity.class,
-                    new Box(-30000, -64, -30000, 30000, 320, 30000),
-                    e -> true)) {
-
-                hostile.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 40, 0, false, false));
-            }
-        }
     }
+
+    @Override
+    protected void onNightEnd(ServerWorld world) {
+        if (!world.getRegistryKey().equals(World.OVERWORLD)) return;
+
+        int event = Lunarevents.getNightEvent();
+        if (event != Lunarevents.BLOOD_MOON && event != Lunarevents.CRIMSON_MOON) return;
+
+        boolean crimson = event == Lunarevents.CRIMSON_MOON;
+
+        NightEventManager.onMoonEnd(world);
+        for (ServerPlayerEntity player : world.getPlayers()) {
+            int score = lunarScores.getOrDefault(player.getUuid(), 0);
+
+            int xp = (int) (100 + (score / (double) SCORE_MAX) * 900);
+            if (crimson) xp = (int) (xp * CRIMSON_XP);
+
+            player.addExperience(xp);
+            player.sendMessage(
+                    Text.literal("You earned " + xp + " XP during "
+                                    + (crimson ? "Crimson Moon!" : "Blood Moon!"))
+                            .formatted(Formatting.GREEN),
+                    true
+            );
+
+            lunarScores.put(player.getUuid(), 0);
+        }
+
+        BloodMoonBossBar.clearAllBars();
+        Lunarevents.setNightEvent(Lunarevents.NONE);
+    }
+
     private void spawnHostileNearPlayer(ServerWorld world, ServerPlayerEntity player) {
-        for (int attempts = 0; attempts < 6; attempts++) {
-            try {
-                int distance = 40 + random.nextInt(11);
-                double angle = random.nextDouble() * Math.PI * 2;
+        for (int i = 0; i < 6; i++) {
+            int dist = 40 + random.nextInt(11);
+            double angle = random.nextDouble() * Math.PI * 2;
 
-                int dx = (int) (Math.cos(angle) * distance);
-                int dz = (int) (Math.sin(angle) * distance);
+            BlockPos pos = player.getBlockPos().add(
+                    (int) (Math.cos(angle) * dist),
+                    0,
+                    (int) (Math.sin(angle) * dist)
+            );
 
-                BlockPos playerPos = player.getBlockPos();
-                BlockPos tryPos = playerPos.add(dx, 0, dz);
+            BlockPos spawn = IsSpawnableChecker.getValidSpawnPos(world, pos, i);
+            if (spawn == null) continue;
 
-                BlockPos spawnPos = IsSpawnableChecker.getValidSpawnPos(world, tryPos, attempts);
-                if (spawnPos == null) continue;
-
-                if (Variants.trySpawnVariant(world, spawnPos)) {
-                    return;
-                }
-
-            } catch (Exception e) {
-                System.out.println("[BloodMoon] Spawn attempt " + attempts + " failed due to exception:");
-                e.printStackTrace(System.out);
+            Entity entity = Variants.trySpawnVariant(world, spawn);
+            if (entity instanceof LivingEntity living) {
+                applyCrimsonModifiers(living);
+                return;
             }
         }
-
-        System.out.println("[BloodMoon] Failed to find valid spawn near " + player.getName().getString());
     }
 
+    private void applyCrimsonModifiers(LivingEntity entity) {
+        if (Lunarevents.getNightEvent() != Lunarevents.CRIMSON_MOON) return;
 
+        if (!(entity instanceof ZombieEntity
+                || entity instanceof SkeletonEntity
+                || entity instanceof SpiderEntity)) return;
 
-    private void addLunarScore(ServerPlayerEntity player, int amount) {
-        UUID id = player.getUuid();
-        int current = lunarScores.getOrDefault(id, 0);
-        int updated = Math.max(SCORE_MIN, Math.min(SCORE_MAX, current + amount));
-        lunarScores.put(id, updated);
+        if (!(entity instanceof MobEntity mob)) return;
+
+        boolean isZombieBrute = mob.getCommandTags().contains("lunarevents:zombie_brute");
+
+        Initialize.applyMultipliers(
+                mob,
+                CRIMSON_DAMAGE,
+                CRIMSON_SPEED,
+                isZombieBrute ? 1.0 : CRIMSON_SCALE
+        );
     }
 
-    public static int getLunarScore(ServerPlayerEntity player) {
-        return lunarScores.getOrDefault(player.getUuid(), 0);
-    }
 
     public void onEntityKilled(ServerWorld world, LivingEntity victim, DamageSource source) {
         if (!(source.getAttacker() instanceof ServerPlayerEntity player)) return;
 
         if (victim instanceof ZombieEntity || victim.getType() == EntityType.SKELETON) {
-            addLunarScore(player, SCORE_PER_KILL);
+            lunarScores.merge(player.getUuid(), SCORE_PER_KILL, Integer::sum);
         }
     }
 
     public void onPlayerDeath(ServerPlayerEntity player) {
-        addLunarScore(player, -SCORE_PER_DEATH);
+        lunarScores.merge(player.getUuid(), -SCORE_PER_DEATH, Integer::sum);
+    }
+
+    public static int getLunarScore(ServerPlayerEntity player) {
+        return lunarScores.getOrDefault(player.getUuid(), 0);
+    }
+    public void forceEnd(ServerWorld world) {
+        onNightEnd(world);
     }
 
 }

@@ -15,13 +15,16 @@ public abstract class NightEvent implements ServerTickEvents.EndWorldTick {
     @Override
     public void onEndTick(ServerWorld world) {
         long timeOfDay = world.getTimeOfDay() % 24000L;
-        boolean isNight = timeOfDay >= 13000L && timeOfDay < 23000L;
+        boolean isNight = timeOfDay >= 13000L;
 
         boolean wasNight = nightActive.getOrDefault(world, false);
+
         if (isNight && !wasNight) {
             nightActive.put(world, true);
             onNightStart(world);
-        } else if (!isNight && wasNight) {
+        }
+
+        if (!isNight && wasNight) {
             nightActive.put(world, false);
             onNightEnd(world);
         }
@@ -30,6 +33,7 @@ public abstract class NightEvent implements ServerTickEvents.EndWorldTick {
             onNightTick(world, timeOfDay);
         }
     }
+
 
     protected void onNightStart(ServerWorld world) {}
     protected void onNightTick(ServerWorld world, long timeOfDay) {}
